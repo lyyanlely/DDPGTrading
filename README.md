@@ -1,1 +1,2 @@
-# DDPGTrading \n reproduce the paper Xiong18
+# DDPGTrading
+reproduce the paper Xiong18
