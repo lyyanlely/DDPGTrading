@@ -7,6 +7,7 @@ to reproduce the model in Xiong2018
 """
 
 #import gym
+from __future__ import division
 import numpy as np
 import random
 import tensorflow as tf
@@ -111,13 +112,13 @@ with tf.Session() as sess:
     p = env_test.market.current_price
     prof_list_0.append(s[2])
     for t in xrange(time_len):
-        s_in = [np.concatenate((s[0]/A_BOUND,p/P_NORM,np.array([s[1]/s[2]])))]  # normalize price by total
+        s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
         a = ddpg.choose_action(sess, s_in)
         #v = critic.predict_value(sess, s_in)   #, a/np.mean(np.abs(a),axis=1)
         s1,r,d = env_test.step(a)  #env.step(a[0])
         p1 = env_test.market.current_price
 
-        s1_in = np.concatenate((s1[0]/A_BOUND,p1/P_NORM,np.array([s1[1]/s1[2]])))
+        s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
         running_reward = running_reward*GAMMA+r/s[2]/SIG
         s = s1
@@ -146,7 +147,7 @@ with tf.Session() as sess:
         while j < MAX_EP_STEPS:
             j+=1
             # Choose an action by the actor network:
-            s_in = [np.concatenate((s[0]/A_BOUND,p/P_NORM,np.array([s[1]/s[2]])))]  # normalize price by total
+            s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
             # a, rnn_state_actor  = actor.choose_action(sess, s_in, rnn_state_actor) #
             # v, rnn_state_critic = critic.predict_value(sess, s_in, a, rnn_state_critic)  #
             a = ddpg.choose_action(sess, s_in)
@@ -157,7 +158,7 @@ with tf.Session() as sess:
             s1,r,d = env.step(a)  #
             p1 = env.market.current_price
 
-            s1_in = np.concatenate((s1[0]/A_BOUND,p1/P_NORM,np.array([s1[1]/s1[2]])))
+            s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
             Replay_buffer.add([[s_in[0],a,r/s[2]/SIG,s1_in]])
             running_reward = running_reward*GAMMA+r/s[2]/SIG
@@ -196,13 +197,13 @@ with tf.Session() as sess:
             p = env_test.market.current_price
             prof_list.append(s[2])
             for t in xrange(time_len):
-                s_in = [np.concatenate((s[0]/A_BOUND,p/P_NORM,np.array([s[1]/s[2]])))]  # normalize price by total
+                s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
                 a = ddpg.choose_action(sess, s_in)
                 # v = critic.predict_value(sess, s_in)   #  a/np.mean(np.abs(a),axis=1)
                 s1,r,d = env_test.step(a)  #env.step(a[0])
                 p1 = env_test.market.current_price
 
-                s1_in = np.concatenate((s1[0]/A_BOUND,p1/P_NORM,np.array([s1[1]/s1[2]])))
+                s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
                 # Add sample to the replay buffer
                 running_reward = running_reward*GAMMA+r/s[2]/SIG
                 s = s1
@@ -226,13 +227,13 @@ with tf.Session() as sess:
     p = env_test.market.current_price
     prof_list.append(s[2])
     for t in xrange(time_len):
-        s_in = [np.concatenate((s[0]/A_BOUND,p/P_NORM,np.array([s[1]/s[2]])))]  # normalize price by total
+        s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
         a = ddpg.choose_action(sess, s_in)
         # v = critic.predict_value(sess, s_in)  #, a/np.mean(np.abs(a),axis=1)
         s1,r,d = env_test.step(a)  #env.step(a[0])
         p1 = env_test.market.current_price
 
-        s1_in = np.concatenate((s1[0]/A_BOUND,p1/P_NORM,np.array([s1[1]/s1[2]])))
+        s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
         running_reward = running_reward*GAMMA+r/s[2]/SIG
         s = s1
