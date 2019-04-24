@@ -4,6 +4,10 @@ Created on Fri Mar 20, 2019
 @author: Le Yan
 
 to reproduce the model in Xiong2018
+
+state input: holding state, portfolio, price, cash_value
+action output: holding state, portfolio, sum(portfolio)=1
+reward: cash > expected stock
 """
 
 #import gym
@@ -31,6 +35,8 @@ import os
 from fnmatch import filter
 from read_stock_json import price_history
 
+plt.ion()
+
 reload(pf)
 
 # import data
@@ -41,16 +47,18 @@ price_hist_train, price_hist_test, names, dates = price_history(dirc,nstock=100)
 # global parameters
 NSTOCK = price_hist_train.shape[0]
 T = price_hist_train.shape[1]
+
 PERIOD = 500
 SIG = .03
 INIT_VALUE = 10000
 BUFFERSIZE = 5000
-A_BOUND = 100
+#A_BOUND = 100
 P_NORM  = price_hist_train.mean()
 
 s_size = 2*NSTOCK+1
-a_size = NSTOCK
-h_size = 3*NSTOCK
+a_size = NSTOCK   # holding value fraction, distribution in stocks (NSTOCK bandit?)
+h_size_a = [500, 400]
+h_size_c = [700, 20]
 
 MAX_EPISODE = 200
 MAX_EP_STEPS = PERIOD
@@ -60,11 +68,11 @@ REC_TRAIN = 20
 PRINT_EPI = 20
 
 GAMMA = 0.99
-LR_A = 0.001    # learning rate for actor
-LR_C = 0.002     # learning rate for critic
+LR_A = 0.0005    # learning rate for actor
+LR_C = 0.0005     # learning rate for critic
 REPLACEMENT = [
     dict(name='soft', tau=0.01),
-    dict(name='hard', replace_target_iter=600)
+    dict(name='hard', rep_iter_a=600, rep_iter_c=500)
 ][0]            # you can try different target replacement strategies
 e = 1
 MODEL_PATH = './model'
@@ -74,7 +82,7 @@ OUTPUT_GRAPH = True
 actor_trainer = tf.train.AdamOptimizer(LR_A)
 critic_trainer = tf.train.AdamOptimizer(LR_C)
 
-ddpg = DDPG(s_size, a_size, A_BOUND, n_hidden=h_size, reward_decay=GAMMA, replace_method=REPLACEMENT,
+ddpg = DDPG(s_size, a_size, n_hidden_a=h_size_a, n_hidden_c=h_size_c, reward_decay=GAMMA, replace_method=REPLACEMENT,
             actor_trainer=actor_trainer, critic_trainer=critic_trainer)
 
 # initialization
@@ -94,6 +102,7 @@ env_test = pf.stockgame(INIT_VALUE,price_hist_test)
 jList = []
 rList = []
 err_list = []
+loss = 10000
 prof_list_ep = []
 with tf.Session() as sess:
 
@@ -112,13 +121,16 @@ with tf.Session() as sess:
     p = env_test.market.current_price
     prof_list_0.append(s[2])
     for t in xrange(time_len):
-        s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
+        s_in = np.concatenate((s[0]/(s[0].max()+0.0001),p/P_NORM,np.array([s[1]/s[2]])))  # normalize price by total
         a = ddpg.choose_action(sess, s_in)
+        #chold = 1-s[1]/s[2]  # current hold
+        # a = np.clip(np.random.normal(a, a*e),0,1)
+        action = (s[2]*a[0]*a[1:]/p-s[0]).astype(np.int)  # change in hold
         #v = critic.predict_value(sess, s_in)   #, a/np.mean(np.abs(a),axis=1)
-        s1,r,d = env_test.step(a)  #env.step(a[0])
+        s1,r,d = env_test.step(action)  #env.step(a[0])
         p1 = env_test.market.current_price
 
-        s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
+        s1_in = np.concatenate((s1[0]/(s1[0].max()+0.0001),p1/P_NORM,np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
         running_reward = running_reward*GAMMA+r/s[2]/SIG
         s = s1
@@ -147,20 +159,23 @@ with tf.Session() as sess:
         while j < MAX_EP_STEPS:
             j+=1
             # Choose an action by the actor network:
-            s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
+            s_in = np.concatenate((s[0]/(s[0].max()+0.0001),p/P_NORM,np.array([s[1]/s[2]])))
+            # [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
             # a, rnn_state_actor  = actor.choose_action(sess, s_in, rnn_state_actor) #
             # v, rnn_state_critic = critic.predict_value(sess, s_in, a, rnn_state_critic)  #
             a = ddpg.choose_action(sess, s_in)
             # v = critic.predict_value(sess, s_in, a/np.mean(np.abs(a),axis=1))
 
-            a = np.random.normal(a, e)
+            a = np.clip(np.random.normal(a, a*e),0,1)
+            action = (s[2]*a[0]*a[1:]/p-s[0]).astype(np.int)
             # Get new state and reward from environment
-            s1,r,d = env.step(a)  #
+            s1,r,d = env.step(action)  #
             p1 = env.market.current_price
 
-            s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
+            s1_in = np.concatenate((s1[0]/(s1[0].max()+0.0001),p1/P_NORM,np.array([s1[1]/s1[2]])))
+            # np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
-            Replay_buffer.add([[s_in[0],a,r/s[2]/SIG,s1_in]])
+            Replay_buffer.add([[s_in,a,r/s[2]/SIG,s1_in]])
             running_reward = running_reward*GAMMA+r/s[2]/SIG
             s = s1
             p = p1
@@ -182,7 +197,7 @@ with tf.Session() as sess:
             # episode stops when
             if d == True or j>=MAX_EP_STEPS:
                 if i%PRINT_EPI==0:
-                    print("episode:", i, "  reward:", running_reward)
+                    print("episode:", i, "  reward:", running_reward, "   exploration:", e, "   loss:", loss)
                 break
 
         # if j==num_steps:
@@ -197,13 +212,15 @@ with tf.Session() as sess:
             p = env_test.market.current_price
             prof_list.append(s[2])
             for t in xrange(time_len):
-                s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
+                s_in = np.concatenate((s[0]/(s[0].max()+0.0001),p/P_NORM,np.array([s[1]/s[2]])))  # normalize price by total
                 a = ddpg.choose_action(sess, s_in)
                 # v = critic.predict_value(sess, s_in)   #  a/np.mean(np.abs(a),axis=1)
-                s1,r,d = env_test.step(a)  #env.step(a[0])
+
+                action = (s[2]*a[0]*a[1:]/p-s[0]).astype(np.int)
+                s1,r,d = env_test.step(action)  #env.step(a[0])
                 p1 = env_test.market.current_price
 
-                s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
+                s1_in = np.concatenate((s1[0]/(s1[0].max()+0.0001),p1/P_NORM,np.array([s1[1]/s1[2]])))
                 # Add sample to the replay buffer
                 running_reward = running_reward*GAMMA+r/s[2]/SIG
                 s = s1
@@ -227,13 +244,15 @@ with tf.Session() as sess:
     p = env_test.market.current_price
     prof_list.append(s[2])
     for t in xrange(time_len):
-        s_in = [np.concatenate(((s[0]-s[0].mean())/(s[0].std()+0.001/NSTOCK),(p-p.mean())/p.std(),np.array([s[1]/s[2]])))]  # normalize price by total
+        s_in = np.concatenate((s[0]/(s[0].max()+0.0001),p/P_NORM,np.array([s[1]/s[2]])))  # normalize price by total
         a = ddpg.choose_action(sess, s_in)
         # v = critic.predict_value(sess, s_in)  #, a/np.mean(np.abs(a),axis=1)
-        s1,r,d = env_test.step(a)  #env.step(a[0])
+
+        action = (s[2]*a[0]*a[1:]/p-s[0]).astype(np.int)
+        s1,r,d = env_test.step(action)  #env.step(a[0])
         p1 = env_test.market.current_price
 
-        s1_in = np.concatenate(((s1[0]-s1[0].mean())/(s1[0].std()+0.001/NSTOCK),(p1-p1.mean())/p1.std(),np.array([s1[1]/s1[2]])))
+        s1_in = np.concatenate((s1[0]/(s1[0].max()+0.0001),p1/P_NORM,np.array([s1[1]/s1[2]])))
             # Add sample to the replay buffer
         running_reward = running_reward*GAMMA+r/s[2]/SIG
         s = s1
