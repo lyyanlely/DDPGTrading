@@ -160,9 +160,9 @@ class DDPG(RL_Net):
         with tf.variable_scope('TD_error'):
             if self.prioritized:
                 self.ISWeights = tf.placeholder(tf.float32, [None, 1], name='IS_weights')
-                self.loss = tf.reduce_mean(self.ISWeights * tf.squared_difference(self.q_target, self.qsa))
+                self.loss = tf.reduce_mean(self.ISWeights * tf.squared_difference(self.q_target, self.qsa)) # / tf.reduce_mean(tf.square(self.action[:,0]))
             else:
-                self.loss = tf.losses.mean_squared_error(labels=self.q_target, predictions=self.qsa)   #
+                self.loss = tf.losses.mean_squared_error(labels=self.q_target, predictions=self.qsa)   # / tf.reduce_mean(tf.square(self.action[:,0]))
 
         with tf.variable_scope('Critic_trainer'):
             self._train_critic = self.crit_train.minimize(self.loss, var_list=self.ce_params)
