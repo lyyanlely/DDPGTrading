@@ -194,10 +194,10 @@ class DDPG(RL_Net):
                         with tf.variable_scope('Q'):
                             out = tf.nn.softmax(self.V + (self.A - tf.reduce_mean(self.A, axis=1, keep_dims=True)))     # Q = V(s) + A(s,a)
                     else:
-                        out = layers.Dense(self.action_dim, activation='softmax', trainable=trainable)(hidden_value)
+                        out = layers.Dense(self.action_dim, activation=None, trainable=trainable)(hidden_value)
                 with tf.name_scope('hold_output_layer'):
                     hold_out = layers.Dense(1, activation='sigmoid', trainable=trainable)(hidden_value)
-            scaled_out = tf.multiply(out, self.action_bound, name='scaled_out')
+            scaled_out = tf.multiply(tf.square(out)/tf.reduce_sum(tf.square(out)), self.action_bound, name='scaled_out')
             return tf.concat([hold_out, scaled_out], 1)
 
         def _build_c(s, a, n_hidden, scope, trainable=True): # build critic network
